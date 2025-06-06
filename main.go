@@ -98,7 +98,7 @@ func (g *GitService) handleTargetRepo() error {
 	}
 
 	g.DeployConfigs = append(g.DeployConfigs, DeploymentConfig{
-		Name:   g.fileNameSuffix,
+		Name:   g.FileNameSuffix,
 		Branch: newBranch,
 		Commit: commit,
 	})
