@@ -6,17 +6,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
-// DeploymentConfig представляет конфигурацию деплоя
 type DeploymentConfig struct {
 	Name   string `json:"name"`
 	Branch string `json:"branch"`
 	Commit string `json:"commit"`
 }
 
-// ReleaseConfig представляет конфигурацию релиза
 type ReleaseConfig struct {
 	Release      string             `json:"release"`
 	Project      string             `json:"project"`
@@ -25,30 +24,36 @@ type ReleaseConfig struct {
 	Repositories []string           `json:"repositories"`
 }
 
-// GitService управляет операциями с Git
 type GitService struct {
-	TargetRepo    string
-	ConfigRepo    string
-	SourceBranch  string
-	Version       string
-	ProjectName   string
-	DeployConfigs []DeploymentConfig
-	TempDir       string
+	TargetRepo     string
+	ConfigRepo     string
+	SourceBranch   string
+	Version        string
+	ProjectName    string
+	FileNameSuffix string
+	DeployConfigs  []DeploymentConfig
+	TempDir        string
 }
 
-// NewGitService создает новый экземпляр GitService
-func NewGitService(targetRepo, configRepo, sourceBranch, version, projectName string) *GitService {
+func NewGitService(
+	targetRepo string,
+	configRepo string,
+	sourceBranch string,
+	version string,
+	projectName string,
+	fileNameSuffix string,
+) *GitService {
 	return &GitService{
-		TargetRepo:    targetRepo,
-		ConfigRepo:    configRepo,
-		SourceBranch:  sourceBranch,
-		Version:       version,
-		ProjectName:   projectName,
-		DeployConfigs: make([]DeploymentConfig, 0),
+		TargetRepo:     targetRepo,
+		ConfigRepo:     configRepo,
+		SourceBranch:   sourceBranch,
+		Version:        version,
+		ProjectName:    projectName,
+		FileNameSuffix: fileNameSuffix,
+		DeployConfigs:  make([]DeploymentConfig, 0),
 	}
 }
 
-// Run выполняет весь процесс релиза
 func (g *GitService) Run() error {
 	if err := g.setup(); err != nil {
 		return fmt.Errorf("setup failed: %w", err)
@@ -103,7 +108,8 @@ func (g *GitService) handleTargetRepo() error {
 
 func (g *GitService) handleConfigRepo() error {
 	configPath := filepath.Join(g.TempDir, "config")
-	configFile := filepath.Join(configPath, "releases", fmt.Sprintf("%s.json", g.Version))
+	fileName := g.generateConfigFileName()
+	configFile := filepath.Join(configPath, "releases", fileName)
 
 	if err := g.cloneRepo(g.ConfigRepo, configPath); err != nil {
 		return err
@@ -122,6 +128,14 @@ func (g *GitService) handleConfigRepo() error {
 	}
 
 	return g.pushChanges(configPath, fmt.Sprintf("Add release config for %s v%s", g.ProjectName, g.Version))
+}
+
+func (g *GitService) generateConfigFileName() string {
+	baseName := fmt.Sprintf("%s_%s", g.ProjectName, g.Version)
+	if g.FileNameSuffix != "" {
+		return fmt.Sprintf("%s_%s.json", baseName, g.FileNameSuffix)
+	}
+	return fmt.Sprintf("%s.json", baseName)
 }
 
 func (g *GitService) cloneRepo(repoURL, path string) error {
@@ -144,7 +158,11 @@ func (g *GitService) createBranch(repoPath, sourceBranch, newBranch string) erro
 }
 
 func (g *GitService) getLastCommit(repoPath string) (string, error) {
-	return g.runGitCommandWithOutput(repoPath, "rev-parse", "HEAD")
+	commit, err := g.runGitCommandWithOutput(repoPath, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(commit), nil
 }
 
 func (g *GitService) createConfigFile(path string, config ReleaseConfig) error {
@@ -190,7 +208,7 @@ func (g *GitService) runGitCommandWithOutput(repoPath string, args ...string) (s
 	if err != nil {
 		return "", fmt.Errorf("command failed: %w", err)
 	}
-	return string(output), nil
+	return strings.TrimSpace(string(output)), nil
 }
 
 func (g *GitService) runCommand(name string, args ...string) error {
@@ -201,8 +219,9 @@ func (g *GitService) runCommand(name string, args ...string) error {
 }
 
 func main() {
-	if len(os.Args) < 6 {
-		fmt.Println("Usage: ./release-automation <target-repo> <config-repo> <source-branch> <version> <project-name>")
+	if len(os.Args) < 7 {
+		fmt.Println("Usage: ./release-automation <target-repo> <config-repo> <source-branch> <version> <project-name> <file-suffix>")
+		fmt.Println("Example: ./release-automation git@repo.com:target.git git@repo.com:config.git develop 1.0.0 afs production")
 		os.Exit(1)
 	}
 
@@ -212,6 +231,7 @@ func main() {
 		os.Args[3],
 		os.Args[4],
 		os.Args[5],
+		os.Args[6],
 	)
 
 	if err := service.Run(); err != nil {
