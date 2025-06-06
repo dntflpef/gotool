@@ -98,7 +98,7 @@ func (g *GitService) handleTargetRepo() error {
 	}
 
 	g.DeployConfigs = append(g.DeployConfigs, DeploymentConfig{
-		Name:   g.ProjectName,
+		Name:   g.fileNameSuffix,
 		Branch: newBranch,
 		Commit: commit,
 	})
@@ -109,7 +109,7 @@ func (g *GitService) handleTargetRepo() error {
 func (g *GitService) handleConfigRepo() error {
 	configPath := filepath.Join(g.TempDir, "config")
 	fileName := g.generateConfigFileName()
-	configFile := filepath.Join(configPath, "releases", fileName)
+	configFile := filepath.Join(configPath, fileName)
 
 	if err := g.cloneRepo(g.ConfigRepo, configPath); err != nil {
 		return err
@@ -118,9 +118,9 @@ func (g *GitService) handleConfigRepo() error {
 	config := ReleaseConfig{
 		Release:      "automation-delivery",
 		Project:      g.ProjectName,
-		Source:       []string{g.TargetRepo},
+		Source:       []string{},
 		Deploy:       g.DeployConfigs,
-		Repositories: []string{g.TargetRepo},
+		Repositories: []string{},
 	}
 
 	if err := g.createConfigFile(configFile, config); err != nil {
